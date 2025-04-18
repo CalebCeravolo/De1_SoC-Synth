@@ -3,6 +3,10 @@ Synth for the FPGA. Contains multiple instruments that are selected using the sw
 Peripherals used include the DE-1 LED Diplay Expansion Board designed by Cai Biesinger
 
 INSTRUCTIONS - 
+First off, check your board revision. Instructions for that are here: https://www.terasic.com.tw/cgi-bin/page/archive.pl?Language=English&No=886 
+if your board is revision B-E, make sure the module instantiation for the adc uses parameter 1 for old adc use.
+if your board revision is F onwards, make sure the module instantiation for the adc uses parameter 0 for new adc use.
+
 To activate the recording and playback function, flip up switch 4. Otherwise the recording/playback pointer wont move and the notes at the instant it is currently at get recorded to and read from
 
 Switch 0 always plays a note. 
@@ -10,6 +14,7 @@ Switch 0 always plays a note.
 Switch 1 mutes all notes except the constantly played note
 
 Switches 3,2 control which instrument you play
+
 00 is flute
 01 is trumpet
 10 is triangle
