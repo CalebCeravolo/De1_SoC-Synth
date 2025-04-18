@@ -157,8 +157,8 @@ module ADCo
 	logic [5:0] count;   // present cycle count. CONVST high marks the start of a cycle. 1 count = 20ns with 50Mhz clk
 	logic [3:0] which;   // selector of which serial data to send based on the current serial clk cycle
 	logic [14:0] buffer; // buffer to store incoming data
-	//logic write;
-	
+	logic write;
+	logic [1:0] first;
 	// initial values
 	initial begin
 		ADC_DIN <= 1;
@@ -168,8 +168,9 @@ module ADCo
 		which <= 0;
 		toggle_bit<=0;
 		ADC_CONVST<=1'b1;
-		//write<=1'b1;
+		write<=1'b1;
 		addr<=0;
+		first<=2'b11;
 	end
 	
 	// intermediate values
@@ -179,23 +180,23 @@ module ADCo
 	always_comb
 		case (which)
 			4'b0000: // WRITE
-				sdata = 1'b1;
+				sdata = write;
 			4'b0001: // SEQ
-				sdata = 1'b0;
+				sdata = 1'b1;
 			4'b0010: // DON'T CARE
 				sdata = 1'bx;
 			4'b0011: // ADD2
-				sdata = addr[2];
+				sdata = 1'b1;
 			4'b0100: // ADD1
-				sdata = addr[1];
+				sdata = 1'b1;
 			4'b0101: // ADD0
-				sdata = addr[0];
+				sdata = 1'b1;
 			4'b0110: // PM1
 				sdata = 1'b1;
 			4'b0111: // PM0
 				sdata = 1'b1;
 			4'b1000: // SHADOW
-				sdata = 1'b0;
+				sdata = 1'b1;
 			4'b1001: // DON'T CARE
 				sdata = 1'bx;
 			4'b1010: // RANGE
@@ -217,37 +218,80 @@ module ADCo
 			toggle_bit<=0;
 			ADC_CONVST<=1'b1;
 			addr<=0;
+			first<=1'b1;
 		end
 		else begin
-			toggle_bit<=~toggle_bit;
-			if (toggle_bit) begin 
+			toggle_bit<=toggle_bit+1'b1;
+			if (&toggle_bit) begin 
 				count<=count+1'b1;
-				if (count==0) begin 
-					ADC_CONVST<=1'b0;
-					ADC_DIN<=sdata;
-					which<=which+1'b1;
+				if (|first) begin
+					if (first!=2'b11) begin
+						if (count==0) begin 
+							ADC_CONVST<=1'b0;
+							ADC_DIN<=1'b1;
+						end
+						if ((count>=1)&(count<=31)) begin  
+							if (count[0]) begin  //If on an odd count. Works only if lower bound of this section is an even number. Otherwise change count to ~count
+								ADC_SCLK<=1'b0;
+							end else begin
+								ADC_SCLK<=1'b1;
+								ADC_DIN<=1'b1;
+							end
+						end
+						if (count==32) begin
+							ADC_SCLK<=1'b1;
+						end
+						if (count==33) begin
+							ADC_CONVST<=1'b1;
+							first<=first-1'b1;
+							count<=0;
+						end
+					end
+					if (count==63) first<=first-1'b1;
 				end
-				
-				if ((count>=1)&(count<=31)) begin  
-					if (count[0]) begin  //If on an odd count. Works only if lower bound of this section is an even number. Otherwise change count to ~count
-						ADC_SCLK<=1'b0;
-					end else begin
-						ADC_SCLK<=1'b1;
+				else if (write) begin
+					if (count==0) begin 
+						ADC_CONVST<=1'b0;
 						ADC_DIN<=sdata;
 						which<=which+1'b1;
-						buffer<={buffer[13:0], ADC_DOUT}; //Loads buffer
+					end
+					if ((count>=1)&(count<=31)) begin  
+						if (count[0]) begin  //If on an odd count. Works only if lower bound of this section is an even number. Otherwise change count to ~count
+							ADC_SCLK<=1'b0;
+						end else begin
+							ADC_SCLK<=1'b1;
+							ADC_DIN<=sdata;
+							which<=which+1'b1;
+						end
+					end
+					if (count==32) begin
+						ADC_SCLK<=1'b1;
+					end
+					if (count==33) begin
+						ADC_CONVST<=1'b1;
+					end
+					if (count==63) begin
+						write<=0;
+						ADC_DIN<=1'b0;
+					end
+				end 
+				else begin
+					if (count==0) begin 
+						ADC_CONVST<=1'b0;
+					end
+					if ((count>=11)&(count<=42)) begin  
+						if (count[0]) begin  //If on an odd count. Works only if lower bound of this section is an even number. Otherwise change count to ~count
+							ADC_SCLK<=1'b0;
+							buffer<={buffer[13:0], ADC_DOUT}; //Loads buffer
+						end else begin
+							ADC_SCLK<=1'b1;
+						end
+					end
+					if (count==43) begin  //After enough time, send data to the buffer and move to the next address 
+						data[buffer[14:12]]<=buffer[11:0];
+						ADC_CONVST<=1'b1;
 					end
 				end
-				if (count==32) begin
-					ADC_SCLK<=1'b1;
-				end
-				if (count==33) begin  //After enough time, send data to the buffer and move to the next address 
-					data[buffer[14:12]]<=buffer[11:0];
-					which<=0;
-					ADC_CONVST<=1'b1;
-					addr<=addr+1'b1;
-				end
-				if (count==35) count<=0;
 			end
 		end
 	end
