@@ -1,3 +1,11 @@
+/*/
+Top level module connecting together all the lower level modules to the wires of the board.
+This project is a Synthesizer. It can be controlled using a potentiometer connected to the adc channels. 
+Which channel it is depends on Switches 7-5. There are a range of instruments that can be played, more to follow
+I am currently working on interfacing with the on board SDRAM chip which will allow me much more flexibility in what 
+the recording feature does. This project started as a final lab project for my college digital logic class but quickly 
+became a passion project that I have worked on in my free time
+/*/
 
 module DE1_SoC (CLOCK_50, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, KEY, LEDR, SW, GPIO_1,
 	FPGA_I2C_SCLK, FPGA_I2C_SDAT, AUD_XCK, AUD_DACLRCK, AUD_ADCLRCK, AUD_BCLK, AUD_ADCDAT, AUD_DACDAT,
@@ -28,6 +36,7 @@ module DE1_SoC (CLOCK_50, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, KEY, LEDR, SW, GPI
 	assign menu[1] = (SW[9])&(~SW[8]); //movement menu (changing notes, adjusting frequencies)
 	assign menu[2] = (~SW[9])&(SW[8]); //debug menu
 	assign menu[3] = (SW[9])&(SW[8]); //volume menu
+	
  	logic [3:0] key_press;
 	logic reset;
 	logic record; 
@@ -37,7 +46,7 @@ module DE1_SoC (CLOCK_50, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, KEY, LEDR, SW, GPI
 	logic reset_released;
 	logic next_note;
 	logic set_freq;
-	logic [1:0] sine_or_triangle;
+	logic [1:0] instrument_select;
 	logic replay;
 	logic [5:0][3:0] volume = {6{4'b0010}};
 	logic volume_increase;
@@ -46,30 +55,39 @@ module DE1_SoC (CLOCK_50, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, KEY, LEDR, SW, GPI
 	logic master_volume;
 	logic mute_toggle;
 	//logic stop;
-	//button assignments 
+	
+	//Menuing assignments
 	always_comb begin 
-		reset = ~KEY[2]&menu[0]; 
-		record = ~KEY[0]&menu[0];
-		play = ((~KEY[1]&(~menu[3]))|SW[0]);  //pressing key1 or flipping sw0 will always play the current frequency
-		voice = ~KEY[3]&menu[0];
-		next_note = key_press[0]&(menu[1]);
-		set_freq = key_press[2]&menu[1]|record;
+		reset = ~KEY[2]&menu[0];               	//General reset variable
+		record = ~KEY[0]&menu[0];				   	//Records the current frequency on the current note track and advances the pointer
+		play = ((~KEY[1]&(~menu[3]))|SW[0]);   	//Pressing key1 or flipping sw0 will always play the current frequency
+		voice = ~KEY[3]&menu[0];				   	//Causes data from the audio in channel to play to the audio out channel
+		next_note = key_press[0]&(menu[1]);	   	//Moves on to the next note track
+		set_freq = key_press[2]&menu[1]|record;	//Sets the frequency of the current note track to the current frequency
 		//erase = KEY[3]&menu[1];
-		volume_increase = menu[3]&(key_press[3]);
-		volume_decrease = menu[3]&(key_press[1]);
-		master_volume   = menu[3]&(~KEY[2]);
-		mute_toggle     = menu[3]&(key_press[0]);
+		volume_increase = menu[3]&(key_press[3]); //Increases the volume decrease (I know this is confusing)
+		volume_decrease = menu[3]&(key_press[1]); //Decreases the volume decrease
+		master_volume   = menu[3]&(~KEY[2]);      //Toggles to master volume which causes volume buttons to control all note tracks
+		mute_toggle     = menu[3]&(key_press[0]);	//Mutes the current note track
 		//single = SW[4];
-		sine_or_triangle = {SW[3],SW[2]};
-		replay = SW[4];
+		instrument_select = {SW[3],SW[2]};			//Selects which instrument will play across all tracks and the constant note
+		replay = SW[4];									//Allows the recording and playback pointer to move. Currently causes note disturbance
 	end
+	
+	// Creates signals that go true for one cycle after a button is pressed
 	on_press key0_press (.in(~KEY[0]), .out(key_press[0]), .clk(CLOCK_50), .reset);
 	on_press key1_press (.in(~KEY[1]), .out(key_press[1]), .clk(CLOCK_50), .reset);
 	on_press key2_press (.in(~KEY[2]), .out(key_press[2]), .clk(CLOCK_50), .reset);
 	on_press key3_press (.in(~KEY[3]), .out(key_press[3]), .clk(CLOCK_50), .reset);
+	
+	// Logic for release of record and reset
 	release_count record_release (.in(record), .out(record_released), .reset, .clk(advance));
 	release_count reset_release (.in(reset), .out(reset_released), .reset(1'b0), .clk(CLOCK_50));
-	//assign stop = (~&recorded_notes)&(~play);
+	
+	
+	// assign stop = (~&recorded_notes)&(~play);
+	
+	
 	/////Audio testing//////
 	logic [23:0] dac_left, dac_right, adc_left, adc_right;
 	logic advance;
@@ -90,26 +108,30 @@ module DE1_SoC (CLOCK_50, HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, KEY, LEDR, SW, GPI
 	
 	//Ram for recording the play signals for the synth
 	sequence_ram rec (.in(play), .write(record), .address(current_recording), .reset, .clk(CLOCK_50), .out(recorded_notes), .current_note); 
+	
 	//Code for 16x16 light display showing the recorded notes
 	tracker lighting (.write(record), .current_note, .current(current_recording), .reset, .RedPixels, .GrnPixels, .clk(CLOCK_50), .in(play), .mute); 
+	
 	//Synth hookup
-	synth playa (.reset, .freqs({{freq},{freqs}}), .play(SW[1] ?{{play&(~record)},5'b0}:{{play&(~record)},{(~mute)&recorded_notes}}), .clk(advance), .CLOCK_50, .out(wave), .which(sine_or_triangle), .volume);
+	synth playa (.reset, .freqs({{freq},{freqs}}), .play(SW[1] ?{{play&(~record)},5'b0}:{{play&(~record)},{(~mute)&recorded_notes}}), .clk(advance), .CLOCK_50, .out(wave), .which(instrument_select), .volume);
+	
 	//audio driver. Self explanitory
 	audio_driver let_there_be_sound (.CLOCK_50, .reset, .dac_left, .dac_right, .adc_left, .adc_right, .advance, .FPGA_I2C_SCLK, .FPGA_I2C_SDAT, .AUD_XCK, .AUD_DACLRCK, .AUD_ADCLRCK, .AUD_BCLK, .AUD_ADCDAT, .AUD_DACDAT);
+	
 	//Switching between using the switches for the frequency and using the ADC. For debugging hence menu2
-	//logic update_volume;
-	//on_press volume_control (.in(clk[22]), .out(update_volume), .clk(CLOCK_50), .reset);
 	always_comb begin
 		if (KEY[3]&menu[2])                  
 			freq = {{SW[9:0]},{2'b00}};
 		else freq = data;
 	end
-//	logic smooth_stop;
-//	on_press smoothing_end (.in(div_clock_recording[3]), .out(smooth_stop), .clk(advance), .reset);
-	//logic for activating the audio as soon as advance becomes true
+	
+	//logic for activating the audio as soon as the advance signal from the audio driver becomes true
 	logic advance2;
 	on_press clock_setup (.in(advance), .out(advance2), .clk(CLOCK_50),.reset);
+	
+	//Integer for looping through notes for audio control
 	integer vc;
+	
 	always_ff @(posedge CLOCK_50) begin
 		if (reset) begin
 			dac_left<=0;

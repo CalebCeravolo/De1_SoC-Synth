@@ -1,15 +1,14 @@
-
 module synth (reset, freqs, play, clk, out, which, volume, CLOCK_50);
 	parameter num_notes = 6;
-	input logic reset, clk, CLOCK_50; //clk should be hooked up to advance (the audio clock)
-	input logic [5:0] play; //Play stores whether to play each note at that instance
-	input logic [5:0][11:0] freqs; //9:0 is the bits for representing which frequency a note is
-	output logic signed [23:0] out; //the audio data to be played
-	logic signed [5:0][23:0] note; //set of notes from triangle functions to combine
-	logic signed [5:0][23:0] mem_notes;
-	logic signed [5:0][23:0] tri_note;
-	input logic [1:0] which; 
-	input logic [num_notes-1:0][3:0] volume;
+	input logic reset, clk, CLOCK_50;   // clk should be hooked up to advance (the audio clock)
+	input logic [5:0] play; 				// Play stores whether to play each note at that instance
+	input logic [5:0][11:0] freqs;   	// 9:0 is the bits for representing which frequency a note is
+	output logic signed [23:0] out; 		// the audio data to be played
+	logic signed [5:0][23:0] note; 		// set of notes from triangle functions to combine
+	logic signed [5:0][23:0] mem_notes; // mem notes are the notes generated from memory files and not from math
+	logic signed [5:0][23:0] tri_note;  // these are the notes generated from mathematical triangle functions
+	input logic [1:0] which; 				// this chooses which instrument to play
+	input logic [num_notes-1:0][3:0] volume; 
 	logic [11:0] freq;
 	logic [3:0] current;
 	logic [23:0] triwave;

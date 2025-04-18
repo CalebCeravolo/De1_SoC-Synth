@@ -1,4 +1,7 @@
-
+/*/
+	Module for the combination of the different instruments except for the triangle wave. Even though it is called sinewave
+	it is actually for all non mathematically generated instruments. When given the
+/*/
 module sinewave 
 	#(parameter num_notes = 6)
 	(clk, out, stop, freq, reset, CLOCK_50, volume, which);
